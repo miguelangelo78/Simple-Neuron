@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 extern crate rand;
 
 use rand::Rng;
@@ -19,13 +21,13 @@ struct Dendrite { /* Dendrite: The input layer of a single neuron */
 }
 
 struct Synapse { /* Synapse: The output layer of a single neuron */
-	raw: f64,                             /* Net value from inputs                                     */
+	net: f64,                             /* Net value from inputs                                     */
 	output: f64,                          /* Final output after activation function                    */
 	error: f64,                           /* Error value (depends on desired value)                    */
 	desired: f64,                         /* What the output should be                                 */
 	error_precision: f64,                 /* How low can the error go until it is considered valid     */
 	threshold: f64,                       /* Threshold value used by the activation function           */
-	activation_function: ActivationModes, /* What activation function should be used for the raw value */
+	activation_function: ActivationModes, /* What activation function should be used for the net value */
 }
 
 struct Neuron { /* The neuron */
@@ -38,42 +40,42 @@ struct Neuron { /* The neuron */
 }
 
 fn propagate(neuron: &mut Neuron, train: bool) {
-	/* Reset internal net (raw) value from last propagation calculation */
-	neuron.synapse.raw = 0.0;
+	/* Reset internal net (net) value from last propagation calculation */
+	neuron.synapse.net = 0.0;
 
-	/* Calculate new synapse raw value */
+	/* Calculate new synapse net value */
 	for dendrite in &mut neuron.inputs {
-		neuron.synapse.raw += dendrite.d * dendrite.w; /* net = net + (Data * Weight) */
+		neuron.synapse.net += dendrite.d * dendrite.w; /* net = net + (Data * Weight) */
 	}
 
 	/* Add bias */
-	neuron.synapse.raw += neuron.bias; /* net = net + bias */
+	neuron.synapse.net += neuron.bias; /* net = net + bias */
 
 	/* Calculate final output using a specific activation function */
 	neuron.synapse.output = match neuron.synapse.activation_function {
 		ActivationModes::IDENTITY  => {
-			neuron.synapse.raw
+			neuron.synapse.net
 		},
 		ActivationModes::BINARY    => {
-			if neuron.synapse.raw < neuron.synapse.threshold
+			if neuron.synapse.net < neuron.synapse.threshold
 				{ 0.0 }
 			else 
 				{ 1.0 }
 		},
 		ActivationModes::LOGISTIC  => {
-			1.0 / (1.0 + (-1.0 * neuron.synapse.raw).exp())
+			1.0 / (1.0 + (-1.0 * neuron.synapse.net).exp())
 		}
 		ActivationModes::TANH      => {
-			neuron.synapse.raw.tanh()
+			neuron.synapse.net.tanh()
 		},
 		ActivationModes::RECTIFIED => {
-			if neuron.synapse.raw < neuron.synapse.threshold
+			if neuron.synapse.net < neuron.synapse.threshold
 				{ 0.0 }
 			else 
-				{ neuron.synapse.raw }
+				{ neuron.synapse.net }
 		},
 		ActivationModes::GAUSSIAN  => {
-			(-1.0 * neuron.synapse.raw.powi(2)).exp()
+			(-1.0 * neuron.synapse.net.powi(2)).exp()
 		}
 	};
 
@@ -90,7 +92,8 @@ fn propagate(neuron: &mut Neuron, train: bool) {
 
 	/* Update valid flag */
 	neuron.good = 
-		if neuron.synapse.error <= neuron.synapse.error_precision.abs() && neuron.synapse.error >= -neuron.synapse.error_precision.abs()
+		if neuron.synapse.error <= neuron.synapse.error_precision.abs() && 
+			neuron.synapse.error >= -neuron.synapse.error_precision.abs()
 			{ true }
 		else 
 			{ false };
@@ -126,15 +129,15 @@ fn create_neuron(
 		bias: bias,                     /* Set bias value               */
 		learning_coeff: learning_coeff, /* Set the learning coefficient */
 		synapse:                        /* Set Synapses                 */
-		Synapse {
-			raw:     0.0,
-			output:  0.0,
-			error:   0.0,
-			desired: desired,
-			error_precision: error_precision,
-			threshold: threshold,
-			activation_function: activation_function
-		},
+			Synapse {
+				net:     0.0,
+				output:  0.0,
+				error:   0.0,
+				desired: desired,
+				error_precision: error_precision,
+				threshold: threshold,
+				activation_function: activation_function
+			},
 		good: false,         /* Reset valid flag        */
 		propagation_count: 0 /* Reset propagation count */
 	}
@@ -148,8 +151,9 @@ static MAX_TRAIN_COUNT: u32 = 10000;
 static CONFIRM_TRAIN_COUNT: u32 = 5; 
 
 unsafe fn dump_neuron(neuron: &mut Neuron) {
-	println!("Iteration {} Epoch {}) Raw: {} Output: {} Desired: {} Error: {}, Valid: {}  (w0: {} w1: {})", 
-		iteration, epoch, neuron.synapse.raw, neuron.synapse.output, neuron.synapse.desired, neuron.synapse.error, neuron.good, neuron.inputs[1].w, neuron.inputs[0].w);
+	println!("Iteration {} Epoch {}) Net: {} Output: {} Desired: {} Error: {}, Valid: {}", 
+		iteration, epoch, neuron.synapse.net, neuron.synapse.output, neuron.synapse.desired,
+		neuron.synapse.error, neuron.good);
 }
 
 unsafe fn cycle_and_dump(neuron: &mut Neuron) {
@@ -158,11 +162,12 @@ unsafe fn cycle_and_dump(neuron: &mut Neuron) {
 	iteration += 1;
 }
 
-unsafe fn train_until_done(neuron: &mut Neuron, max_epochs: u32) -> u32 {
+unsafe fn train_until_done(neuron: &mut Neuron, max_cycles: u32) -> u32 {
 	let mut valid_counter = 0;
 	let mut counter = 0;
+
 	#[allow(unused_variables)]
-	for i in 0..max_epochs {
+	for i in 0..max_cycles {
 		counter = i;
 		cycle_and_dump(neuron);
 		if neuron.good {
